@@ -28,12 +28,12 @@ app.get('/api/user/:username', async (req, res) => {
         const $ = cheerio.load(html);
 
         const currentRating = parseInt($('.rating-number').first().text().trim()) || 0;
-        const stars = $('.rating-star').first().text().trim() || '0★';
+        const stars = $('.rating-star').first().text().trim() || '0*';
 
         const highestRatingText = $('.rating-header small').text() || '';
         const highestRating = parseInt(highestRatingText.replace(/[^0-9]/g, '')) || currentRating;
 
-        const rankText = stars.replace('★', '').trim() + ' star';
+        const rankText = stars.replace('*', '').trim() + ' star';
 
         const ratingHistory = [];
         $('script').each((_, el) => {
