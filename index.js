@@ -27,18 +27,63 @@ app.get('/api/user/:username', async (req, res) => {
 
         const $ = cheerio.load(html);
 
-        const profile = {
-            username: username,
-            name: $('h1.h2-style').first().text().trim() || 'N/A',
-            currentRating: $('.rating-number').first().text().trim() || 'N/A',
-            stars: $('.rating-star').first().text().trim() || 'N/A',
-            highestRating: $('.rating-header small').text().replace('Highest Rating', '').trim() || 'N/A',
-            country: $('.user-country-name').text().trim() || 'N/A',
-            institution: $('.user-school-name').text().trim() || 'N/A',
-            lastactive: $('.lastactive').text().trim() || 'N/A',
-        };
+        const currentRating = parseInt($('.rating-number').first().text().trim()) || 0;
+        const stars = $('.rating-star').first().text().trim() || '0★';
 
-        res.json({ success: true, data: profile });
+        const highestRatingText = $('.rating-header small').text() || '';
+        const highestRating = parseInt(highestRatingText.replace(/[^0-9]/g, '')) || currentRating;
+
+        const rankText = stars.replace('★', '').trim() + ' star';
+
+        const ratingHistory = [];
+        $('script').each((_, el) => {
+            const scriptContent = $(el).html();
+            if (scriptContent && scriptContent.includes('all_rating')) {
+                const match = scriptContent.match(/all_rating\s*=\s*(\[.*?\]);/s);
+                if (match) {
+                    try {
+                        const parsed = JSON.parse(match[1]);
+                        parsed.forEach(entry => {
+                            ratingHistory.push({
+                                contestName: entry.name,
+                                rating: entry.rating,
+                                rank: entry.rank,
+                                date: entry.end_date
+                            });
+                        });
+                    } catch (e) { }
+                }
+            }
+        });
+
+        const solvedProblems = [];
+        $('.problems-solved .content').find('a').each((_, el) => {
+            solvedProblems.push($(el).text().trim());
+        });
+
+        const calendarMap = {};
+        ratingHistory.forEach(entry => {
+            if (entry.date) {
+                const ts = Math.floor(new Date(entry.date).getTime() / 1000);
+                calendarMap[ts] = (calendarMap[ts] || 0) + 1;
+            }
+        });
+
+        res.json({
+            success: true,
+            data: {
+                username,
+                currentRating,
+                highestRating,
+                stars,
+                rank: rankText,
+                country: $('.user-country-name').text().trim() || 'N/A',
+                institution: $('.user-school-name').text().trim() || 'N/A',
+                ratingHistory,
+                solvedProblems,
+                submissionCalendar: JSON.stringify(calendarMap)
+            }
+        });
 
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
