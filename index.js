@@ -61,6 +61,8 @@ app.get('/api/user/:username', async (req, res) => {
             solvedProblems.push($(el).text().trim());
         });
 
+        const totalSolved = solvedProblems.length;
+
         const calendarMap = {};
         ratingHistory.forEach(entry => {
             if (entry.date) {
@@ -81,6 +83,7 @@ app.get('/api/user/:username', async (req, res) => {
                 institution: $('.user-school-name').text().trim() || 'N/A',
                 ratingHistory,
                 solvedProblems,
+                totalSolved,
                 submissionCalendar: JSON.stringify(calendarMap)
             }
         });
