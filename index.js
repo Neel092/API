@@ -1,19 +1,48 @@
 import axios from "axios";
 import express from "express";
 import * as cheerio from "cheerio";
+import Redis from "ioredis";
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
 
 app.get('/', (req, res) => {
     res.json({ message: "CodeChef API is running" })
 });
 
+
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+
+
+redis.on('connect', () => console.log('Redis connected'));
+redis.on('error', (err) => console.log('Redis error:', err.message))
+
+const CACHE_TTL = 60 * 10;
+
 app.get('/api/user/:username', async (req, res) => {
 
-    const { username } = req.params;
+
+    const username = req.params.username.replace(/^:/, '');
+
+    // const { username } = req.params;
 
     try {
+
+        const cacheKey = `codechef:user:${username}`;
+        const cached = await redis.get(cacheKey);
+
+        if (cached) {
+            console.log(`Cache HIT for : ${username}`);
+
+            return res.json({
+                success: true,
+                fromCache: true, // batat hai ki yeh data cache sei aya hai
+                data: JSON.parse(cached)
+            });
+        }
+
+        console.log(`Cache MISS for ${username}  --fetching from codechef`);
 
         const { data: html } = await axios.get(
             `https://www.codechef.com/users/${username}`,
@@ -31,7 +60,8 @@ app.get('/api/user/:username', async (req, res) => {
         const stars = $('.rating-star').first().text().trim() || '0*';
 
         const highestRatingText = $('.rating-header small').text() || '';
-        const highestRating = parseInt(highestRatingText.replace(/[^0-9]/g, '')) || currentRating;
+        const highestRatingMatch = highestRatingText.match(/\d+/);
+        const highestRating = highestRatingMatch ? parseInt(highestRatingMatch[0]) : currentRating;
 
         const rankText = stars.replace('*', '').trim() + ' star';
 
@@ -61,7 +91,20 @@ app.get('/api/user/:username', async (req, res) => {
             solvedProblems.push($(el).text().trim());
         });
 
-        const totalSolved = solvedProblems.length;
+        let totalSolved = 0;
+        $('.badge__description').each((_, el) => {
+            const text = $(el).text().toLowerCase();
+            if (text.includes('solving')) {
+                const match = $(el).text().match(/(\d+)/);
+                if (match) {
+                    const num = parseInt(match[1]);
+                    if (num > totalSolved) totalSolved = num;
+                }
+            }
+        });
+
+        const contestText = $('.contest-participated-count').first().text().trim();
+        const NumberOfContest = parseInt(contestText.match(/\d+/)?.[0]) || 0;
 
         const calendarMap = {};
         ratingHistory.forEach(entry => {
@@ -71,22 +114,25 @@ app.get('/api/user/:username', async (req, res) => {
             }
         });
 
-        res.json({
-            success: true,
-            data: {
-                username,
-                currentRating,
-                highestRating,
-                stars,
-                rank: rankText,
-                country: $('.user-country-name').text().trim() || 'N/A',
-                institution: $('.user-school-name').text().trim() || 'N/A',
-                ratingHistory,
-                solvedProblems,
-                totalSolved,
-                submissionCalendar: JSON.stringify(calendarMap)
-            }
-        });
+        const data = {
+            username,
+            currentRating,
+            highestRating,
+            stars,
+            rank: rankText,
+            country: $('.user-country-name').text().trim() || 'N/A',
+            institution: $('.user-school-name').text().trim() || 'N/A',
+            NumberOfContest,
+            totalSolved,
+            solvedProblems,
+            ratingHistory,
+            submissionCalendar: JSON.stringify(calendarMap)
+        };
+
+        await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
+        console.log(`Cached ${username} for ${CACHE_TTL / 60} minutes`);
+
+        res.json({ success: true, fromCache: false, data });
 
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -94,6 +140,12 @@ app.get('/api/user/:username', async (req, res) => {
 
 });
 
+// khudse delete karo cache
+app.delete('/cache/:username', async (req, res) => {
+    const username = req.params.username.replace(/^:/, '');
+    await redis.del(`codechef:user:${username}`);
+    res.json({ success: true, message: `Cache cleared for ${username}` });
+});
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
