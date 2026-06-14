@@ -4,7 +4,7 @@ import * as cheerio from "cheerio";
 import Redis from "ioredis";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 
 
 app.get('/', (req, res) => {
@@ -12,12 +12,19 @@ app.get('/', (req, res) => {
 });
 
 
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+console.log("REDIS_URL =", process.env.REDIS_URL);
+
+const redis = new Redis(process.env.REDIS_PUBLIC_URL || 'redis://localhost:6379');
 
 
 redis.on('connect', () => console.log('Redis connected'));
-redis.on('error', (err) => console.log('Redis error:', err.message))
+redis.on('error', (err) => {
 
+    console.error("REDIS FULL ERROR");
+
+    console.error(err);
+
+});
 const CACHE_TTL = 60 * 10;
 
 app.get('/api/user/:username', async (req, res) => {
