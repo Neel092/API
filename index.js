@@ -4,7 +4,7 @@ import * as cheerio from "cheerio";
 import Redis from "ioredis";
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 8080;
 
 
 app.get('/', (req, res) => {
@@ -14,7 +14,7 @@ app.get('/', (req, res) => {
 
 console.log("REDIS_URL =", process.env.REDIS_URL);
 
-const redis = new Redis(process.env.REDIS_PUBLIC_URL || 'redis://localhost:6379');
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 
 redis.on('connect', () => console.log('Redis connected'));
